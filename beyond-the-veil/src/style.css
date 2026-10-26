@@ -1,0 +1,175 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  font-family: Inter, sans-serif;
+  color: #eee9dd;
+  background: #10131b;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: #f5e9ce;
+  background: #29303b;
+  border: 1px solid #75664d;
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+button:hover { background: #414653; }
+
+button:focus-visible {
+  outline: 2px solid #e6c27b;
+  outline-offset: 3px;
+}
+
+#app, #world {
+  width: 100vw;
+  height: 100dvh;
+}
+
+#world {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+.overlay {
+  position: fixed;
+  z-index: 2;
+  background: #10131bdf;
+  border: 1px solid #71634d;
+  border-radius: 10px;
+  padding: 14px;
+  backdrop-filter: blur(12px);
+}
+
+.brand {
+  top: 18px;
+  left: 18px;
+}
+
+.brand h1 {
+  font: 600 19px Cinzel, serif;
+  margin: 0 0 5px;
+  letter-spacing: 2px;
+}
+
+.muted { color: #b8b5ae; font-size: 12px; }
+
+.party {
+  top: 18px;
+  right: 18px;
+  width: 220px;
+}
+
+.party h2, .journal h2 {
+  font: 600 13px Cinzel, serif;
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+}
+
+.member {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid #ffffff18;
+  font-size: 12px;
+}
+
+.member small {
+  display: block;
+  color: #b8b5ae;
+  margin-top: 4px;
+}
+
+.journal {
+  bottom: 18px;
+  left: 18px;
+  max-width: 300px;
+  font-size: 13px;
+}
+
+.objective {
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  width: min(440px, 90vw);
+  pointer-events: none;
+}
+
+.objective strong {
+  font: 600 16px Cinzel, serif;
+  display: block;
+  margin-bottom: 7px;
+}
+
+#hint { color: #e6c27b; font-size: 12px; }
+
+#start {
+  position: fixed;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #080a10cc;
+}
+
+.start-card {
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+  text-align: center;
+  background: #171b25;
+  border: 1px solid #8d754b;
+  border-radius: 12px;
+}
+
+.start-card h1 {
+  font: 600 clamp(27px, 6vw, 42px) Cinzel, serif;
+  letter-spacing: 2px;
+}
+
+.start-card p {
+  line-height: 1.7;
+  color: #c6c2b8;
+}
+
+#start button { margin-top: 12px; }
+
+#notice {
+  position: fixed;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #11151eeb;
+  border: 1px solid #c6a36a;
+  border-radius: 8px;
+  padding: 16px 22px;
+  max-width: 85vw;
+  text-align: center;
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .party { width: 165px; top: 100px; }
+  .brand h1 { font-size: 14px; }
+  .journal { max-width: 185px; bottom: 90px; }
+  .overlay { padding: 10px; }
+  .objective { bottom: 14px; }
+}
