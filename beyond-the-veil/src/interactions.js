@@ -1,49 +1,77 @@
-// Local prototype state only. Puzzle validation and networking are future work.
-export function createInteractions({ runes, ringGroup, brass, ui }) {
-  let solvedRunes = 0;
-  let ringTurns = 0;
+import { createPuzzle, RUNE_LABELS } from './puzzle.js';
 
-  function inspect(object) {
-    const title = object.userData.title;
-    const description = object.userData.description;
+export function createInteractions({ setPuzzleState, ui }) {
+  const puzzle = createPuzzle();
 
-    if (title === 'Celestial Orrery') {
-      ringTurns++;
-      ringGroup.rotation.y += Math.PI / 4;
-      ringGroup.rotation.x += 0.08;
-
-      if (ringTurns >= 3) {
-        ui.setHint('The rings have shifted. Perhaps the runes hold another clue.');
-      } else {
-        ui.setHint('The brass rings rotate. Try examining the symbols around the chamber.');
-      }
-    }
-
-    if (title.startsWith('Rune')) {
-      const index = Number(title.split(' ')[1]) - 1;
-      const rune = runes[index];
-
-      rune.material = brass;
-      solvedRunes = new Set(
-        runes.filter(r => r.material === brass)
-      ).size;
-
-      ui.setHint(`${solvedRunes} of 3 runes activated. Find the star chart to learn their order.`);
-    }
-
-    if (title === 'Star Chart') {
-      ui.setClues(
-        'Star Chart discovered: Crown → River → Gate. The three runes may follow this sequence.'
-      );
-      ui.setHint('A clue has been added to your journal.');
-    }
-
-    if (solvedRunes === 3 && ringTurns >= 3) {
-      ui.setHint('The mechanism stirs, but its correct sequence remains undiscovered.');
-    }
-
-    ui.showNotice(title, description);
+  function render(state) {
+    setPuzzleState(state);
+    ui.setProgress(state);
   }
 
-  return { inspect };
+  function inspect(object) {
+    const { type, title, description, runeId } = object.userData;
+    const actions = {
+      chart: { type: 'read-chart' },
+      rune: { type: 'activate-rune', runeId },
+      orrery: { type: 'align-orrery' },
+      exit: { type: 'exit' }
+    };
+    if (!actions[type]) return;
+
+    const result = puzzle.act(actions[type]);
+    render(result.state);
+    let message;
+
+    switch (result.type) {
+      case 'chart-discovered':
+        ui.setClues('Crown → River → Gate. Crown: three points; River: two waves; Gate: an arch. Activate them in order on the east wall, then align the central orrery.');
+        message = description;
+        break;
+      case 'need-chart':
+        message = 'The mechanism gives no answer. Find and inspect the glowing brass star chart on the west (left-hand) wall before using the runes.';
+        break;
+      case 'rune-activated':
+        message = `${RUNE_LABELS[runeId]} awakens in gold. ${result.state.activated.length} of 3 runes are active. Follow the order in your journal.`;
+        break;
+      case 'ready':
+        message = 'All three runes shine in gold. Return to the celestial orrery in the center and press E to align its rings.';
+        break;
+      case 'already-active':
+        message = 'This rune is already active. Repeated activation does not change your progress; follow the next sign in your journal.';
+        break;
+      case 'wrong-order':
+        message = 'The runes return to blue: that was the wrong order. All rune progress has reset. Your journal still holds the clue; start again with the Crown.';
+        break;
+      case 'not-ready':
+        message = 'The rings resist your touch. Activate all three runes in the order recorded in your journal first. Your current rune progress is unchanged.';
+        break;
+      case 'unlocked':
+        message = 'The rings align and the stone seal withdraws. The exit on the north wall is open. Approach the glowing doorway and press E to leave.';
+        break;
+      case 'already-unlocked':
+        message = 'The exit is already open. Approach the glowing doorway on the north wall and press E to leave.';
+        break;
+      case 'locked':
+        message = 'The exit is sealed. Read the star chart on the west wall, awaken the three runes in its order, then align the central orrery.';
+        break;
+      case 'completed':
+        ui.setHint('The chamber is complete. The path home is open.');
+        ui.showCompletion();
+        return;
+      default:
+        return;
+    }
+
+    ui.setHint(message);
+    ui.showNotice(title, message);
+  }
+
+  function reset() {
+    const { state } = puzzle.act({ type: 'reset' });
+    ui.resetPuzzle();
+    render(state);
+  }
+
+  render(puzzle.getState());
+  return { inspect, reset, getState: puzzle.getState };
 }

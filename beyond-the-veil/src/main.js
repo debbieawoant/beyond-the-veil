@@ -6,7 +6,8 @@ import { createInteractions } from './interactions.js';
 import { createUI } from './ui.js';
 
 const ui = createUI(document.querySelector('#app'));
-const { scene, interactables, runes, ringGroup, brass } = createChamber();
+const chamber = createChamber();
+const { scene, interactables } = chamber;
 
 const camera = new THREE.PerspectiveCamera(
   75, innerWidth / innerHeight, 0.1, 100
@@ -25,19 +26,26 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 
-const interactions = createInteractions({ runes, ringGroup, brass, ui });
+const interactions = createInteractions({ ...chamber, ui });
 const controls = createControls({
   camera,
   canvas: ui.canvas,
+  scene,
   interactables,
   ui,
   onInspect: interactions.inspect
 });
 ui.onEnter(() => controls.enter());
+ui.onRestart(() => {
+  interactions.reset();
+  controls.restart();
+});
 
-function animate() {
+let lastFrame = performance.now();
+function animate(now) {
   requestAnimationFrame(animate);
-  controls.update();
+  controls.update((now - lastFrame) / 1000);
+  lastFrame = now;
   renderer.render(scene, camera);
 }
 
@@ -48,4 +56,4 @@ addEventListener('resize', () => {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 });
 
-animate();
+requestAnimationFrame(animate);

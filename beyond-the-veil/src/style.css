@@ -96,7 +96,7 @@ button:focus-visible {
 .journal {
   bottom: 18px;
   left: 18px;
-  max-width: 300px;
+  max-width: min(300px, 24vw);
   font-size: 13px;
 }
 
@@ -105,7 +105,7 @@ button:focus-visible {
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  width: min(440px, 90vw);
+  width: min(500px, 44vw);
   pointer-events: none;
 }
 
@@ -117,7 +117,20 @@ button:focus-visible {
 
 #hint { color: #e6c27b; font-size: 12px; }
 
-#start {
+#progress { margin-bottom: 6px; font-size: 12px; }
+#target { min-height: 20px; margin-top: 6px; color: #8ee7f4; font-size: 13px; }
+
+#crosshair {
+  position: fixed;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff8;
+  pointer-events: none;
+}
+
+#start, #complete {
   position: fixed;
   z-index: 5;
   inset: 0;
@@ -125,6 +138,7 @@ button:focus-visible {
   place-items: center;
   padding: 20px;
   background: #080a10cc;
+  overflow-y: auto;
 }
 
 .start-card {
@@ -161,15 +175,21 @@ button:focus-visible {
   padding: 16px 22px;
   max-width: 85vw;
   text-align: center;
-  pointer-events: none;
+  max-height: 85dvh;
+  overflow-y: auto;
 }
+
+#notice h2 { font: 600 22px Cinzel, serif; }
+#notice p { line-height: 1.6; }
+#notice button { margin-top: 8px; }
 
 .hidden { display: none !important; }
 
 @media (max-width: 600px) {
   .party { width: 165px; top: 100px; }
   .brand h1 { font-size: 14px; }
-  .journal { max-width: 185px; bottom: 90px; }
+  .journal { max-width: 45vw; bottom: auto; top: 100px; left: 12px; }
   .overlay { padding: 10px; }
-  .objective { bottom: 14px; }
+  .objective { bottom: 14px; width: 90vw; }
+  .start-card { padding: 20px; }
 }

@@ -10,7 +10,7 @@ The project is being developed with a focus on immersive 3D environments, meanin
 
 **Live Prototype:** https://beyond-the-veil.debbieannwoantoine.workers.dev/
 
-**Project Status:** Early prototype — active development
+**Project Status:** Early prototype — local first-chamber puzzle implemented; multiplayer planned. The live URL may lag behind local development.
 
 ---
 
@@ -173,6 +173,17 @@ The central artifact and its surrounding mechanisms will become important elemen
 
 The chapter should establish the tone of the game: quiet tension, discovery, ancient magic, and the feeling that the chamber was built for a purpose the players do not yet understand.
 
+### Current local playtest rules
+
+1. Inspect the glowing brass **Star Chart** on the west (left-hand) wall. Its clue is added to the journal.
+2. Activate the east-wall symbols in the order **Crown → River → Gate**. The Crown has three points, the River has two waves, and the Gate is an arch. Their physical arrangement is not the solution order.
+3. A wrong rune resets all rune progress, but keeps the journal clue. Repeating an already-active rune is safe. Activated runes glow gold instead of blue.
+4. With all three runes active, inspect the central **Celestial Orrery** to align its rings and open the northern exit. Early orrery use does not erase progress.
+5. Approach the glowing open doorway and press **E** to leave and complete the chamber.
+6. Choose **Play again** to reset the puzzle, journal, door, and player view. Progress is local and is not saved across reloads.
+
+Use WASD to move, the mouse to look, and E to interact or dismiss an inspection. A crosshair and separate targeting prompt identify what E will affect; inspection notices pause movement and mouse look. Escape releases the mouse; after closing a notice, click the scene to capture it again. Every class can complete this local puzzle because class abilities are not active yet.
+
 ## Multiplayer Experience
 
 The long-term goal is to support cooperative sessions of up to four players.
@@ -285,6 +296,10 @@ Third-party free tiers may have usage limits and can change. Production costs sh
 - Keyboard-based movement and object inspection.
 - An initial HUD and fantasy-themed interface.
 - A live Cloudflare-hosted prototype.
+- A complete **local** first-chamber puzzle with visible, distinct rune glyphs, a readable chart, enforced activation order, retry feedback, an opening exit, completion, and replay.
+- Frame-rate-independent movement, inspection input guards, and scenery-aware targeting.
+
+The local additions above have not been deployed automatically. Multiplayer is still not implemented.
 
 ### In active development
 
@@ -302,7 +317,7 @@ Third-party free tiers may have usage limits and can change. Production costs sh
 - Functional class-specific abilities.
 - Shared puzzle state and clue journal.
 - Contextual pings and cooperative communication.
-- Complete puzzle progression and chapter transitions.
+- Additional puzzle sequences and chapter transitions.
 - Full audio design and additional chambers.
 
 The interface or visual presence of a feature does not mean its underlying functionality is complete. Features should be marked implemented only after they have been tested.
@@ -322,11 +337,11 @@ The interface or visual presence of a feature does not mean its underlying funct
 
 ### Phase 2 — Puzzle System
 
-- [ ] Design the opening chamber's complete puzzle sequence.
-- [ ] Implement reusable interaction and puzzle components.
-- [ ] Add clue discovery and clue tracking.
-- [ ] Implement puzzle validation and progression.
-- [ ] Add success, failure, and completion feedback.
+- [x] Design the opening chamber's complete puzzle sequence.
+- [x] Implement modular interaction and puzzle components.
+- [x] Add local clue discovery and clue tracking.
+- [x] Implement local puzzle validation and progression.
+- [x] Add success, failure, completion, and replay feedback.
 - [ ] Test puzzle logic with different party sizes.
 
 ### Phase 3 — Character Abilities
@@ -417,11 +432,13 @@ All paths below are relative to the application folder:
 | `src/scene.js` | Chamber geometry, lighting, materials, and inspectable objects |
 | `src/controls.js` | Keyboard input, mouse look, movement, and targeting |
 | `src/interactions.js` | Local prototype interaction state and inspection effects |
+| `src/puzzle.js` | Pure local puzzle rules, stable rune identifiers, and resettable state |
 | `src/ui.js` | Start screen, class selection, party placeholder, journal, hints, and notices |
 | `src/style.css` | Existing visual styling and layout |
-| `test/prototype.test.js` | Baseline scene, interaction, and control regression tests |
+| `test/prototype.test.js` | Scene, interaction, control, and raycast-driven chamber tests |
+| `test/puzzle.test.js` | Puzzle sequence, validation, idempotency, completion, and reset tests |
 
-This is a behavior-preserving split of the original prototype, not a new puzzle or multiplayer implementation. There is no backend, Supabase configuration, or required environment variable yet.
+The original prototype was first split into modules without changing behavior. The current local playtest adds a complete opening puzzle on that foundation. There is no backend, Supabase configuration, or required environment variable yet.
 
 ### Automated checks
 
@@ -433,7 +450,7 @@ npm run build
 npm audit
 ```
 
-Tests use Node's built-in test runner, without an additional test dependency. They check scene structure, independent local state, rune activation counts, orrery rotation, journal updates, movement gating and bounds, mouse-look limits, and targeting/inspection. Some assertions deliberately record incomplete prototype behavior; update them when implementing the corresponding planned feature.
+Tests use Node's built-in test runner, without an additional test dependency. The 27 tests cover scene structure and target visibility, puzzle prerequisites and order, invalid and repeated actions, retries, completion, replay, journal updates, elapsed-time movement, inspection/focus input guards, occlusion, targeting range, and an entire solve using actual scene raycasts and E input.
 
 These checks do not replace play-testing: they do not test WebGL rendering, real pointer-lock permission, accessibility, Cloudflare settings, or multiplayer.
 
@@ -478,20 +495,28 @@ For a future Git-connected build, the application/root directory is `beyond-the-
 - Move with WASD and look with the mouse after allowing pointer lock.
 - Press Escape to release the pointer; click the canvas to capture it again.
 - Approach the orrery, aim at it, press E to inspect, and press E again to dismiss.
+- Before reading the chart, confirm that the runes/orrery ask you to find it and cannot unlock the exit.
+- Inspect the chart on the west wall; confirm that its inscription appears in the journal.
+- On the east wall, try Gate first: confirm the wrong-order notice and zero rune progress. The journal should remain intact.
+- Activate Crown, River, then Gate; check their distinct shapes, gold activation feedback, and the progress display. Repeating an active rune should not advance or reset the sequence.
+- Use the orrery to open the north-wall exit. Approach the glowing doorway and press E; verify the completion screen and released mouse.
+- Click Play again; confirm a fresh camera position, empty journal, blue runes, sealed exit, and a working second attempt.
+- While inspecting, confirm that movement/look are paused and holding E does not immediately dismiss the notice. Escape/focus changes should not leave movement keys stuck.
 - Resize the browser and check that the canvas and overlays remain usable.
 - Repeat on the uploaded build; record browser, device, steps, expected outcome, and actual outcome for failures.
 
-### Baseline verification and known limitations
+### Verification history and remaining limitations
 
 On **2026-10-26**, a production build of the original, pre-refactor code matched the public deployment's HTML, JavaScript, and CSS **byte-for-byte**. The corresponding asset filenames were `index-BBLorQlz.js` and `index-ClVH_mX4.css`. Module changes can legitimately produce a different JavaScript filename; that does not update the public deployment automatically.
 
-The baseline work intentionally leaves these existing gameplay issues unchanged:
+The new local puzzle passes 27 Node tests and a headless Firefox playthrough covering a wrong sequence, the full successful sequence, an opening exit, completion, and replay, with no JavaScript errors. The browser check used real WebGL rendering with deterministic frame timing and simulated pointer capture; real desktop mouse-capture permission and human usability still need manual play-testing.
 
-- The puzzle has no validated sequence, opening exit, or win condition.
-- Runes and the star chart are created and registered as interaction targets but never attached to the rendered scene. Fix their visibility and targeting during the puzzle milestone.
-- Movement is frame-rate-dependent; collision only clamps the player's position to the room bounds.
-- Inspection notices do not pause movement or mouse look; repeated E events and focus changes need better input handling.
+Remaining limitations:
+
+- Collision only clamps the player's position to the room bounds; pillars and the pedestal do not yet block movement.
 - Class abilities, actual party membership, multiplayer, and touch controls are not implemented.
+- Progress is in memory only. Additional chapters, audio, and broader accessibility/performance work remain planned.
+- The existing public deployment is not automatically updated by local edits or builds.
 
 ## Contributing and Future Development
 

@@ -4,17 +4,21 @@ import * as THREE from 'three';
 import { createChamber } from '../src/scene.js';
 import { createControls } from '../src/controls.js';
 import { createInteractions } from '../src/interactions.js';
+import { RUNE_SEQUENCE } from '../src/puzzle.js';
 
 function createTestUI() {
   return {
-    hint: '',
-    clues: '',
-    notice: null,
+    hint: '', clues: '', target: '', notice: null, completed: false,
     setHint(text) { this.hint = text; },
     setClues(text) { this.clues = text; },
+    setTarget(text) { this.target = text; },
+    setProgress(state) { this.progress = state; },
     showNotice(title, description) { this.notice = { title, description }; },
     hideNotice() { this.notice = null; },
-    isNoticeOpen() { return this.notice !== null; }
+    isNoticeOpen() { return this.notice !== null; },
+    isComplete() { return this.completed; },
+    showCompletion() { this.completed = true; this.notice = null; },
+    resetPuzzle() { this.completed = false; this.clues = ''; this.notice = null; }
   };
 }
 
@@ -22,98 +26,91 @@ function createLocalGame() {
   const chamber = createChamber();
   const ui = createTestUI();
   const interactions = createInteractions({ ...chamber, ui });
-  return { ...chamber, ui, ...interactions };
+  const target = type => chamber.interactables.find(object => object.userData.type === type);
+  const rune = id => chamber.runes.find(object => object.userData.runeId === id);
+  return { ...chamber, ui, ...interactions, target, rune };
 }
 
-test('chamber retains the prototype geometry, lighting, and inspection targets', () => {
-  const { scene, interactables, ringGroup } = createChamber();
+function readyGame(game) {
+  game.inspect(game.target('chart'));
+  for (const runeId of RUNE_SEQUENCE) game.inspect(game.rune(runeId));
+}
 
-  assert.deepEqual(scene.getObjectByName('floor').position.toArray(), [0, -0.15, 0]);
+test('chamber retains its architecture and every interaction target is rendered', () => {
+  const { scene, interactables, runes, ringGroup } = createChamber();
   assert.equal(scene.getObjectByName('floor').geometry.parameters.width, 12);
   assert.deepEqual(scene.getObjectByName('sealed door').position.toArray(), [0, 2, -5.72]);
   assert.equal(scene.children.filter(object => object.name === 'pillar').length, 4);
   assert.equal(scene.children.filter(object => object.isPointLight).length, 4);
-  assert.equal(scene.children.filter(object => object.isDirectionalLight).length, 1);
-  assert.equal(scene.children.filter(object => object.isHemisphereLight).length, 1);
   assert.equal(ringGroup.children.length, 4);
-  assert.deepEqual(interactables.map(object => object.userData.title), [
-    'Celestial Orrery', 'Rune 1', 'Rune 2', 'Rune 3', 'Star Chart'
-  ]);
-  assert.ok(interactables.every(object => object.userData.interactable));
+  assert.equal(interactables.length, 6);
+  for (const object of interactables) {
+    assert.equal(object.parent, scene);
+    assert.equal(object.visible, true);
+  }
+  assert.deepEqual(runes.map(rune => rune.userData.runeId), ['river', 'gate', 'crown']);
+  assert.ok(runes.every(rune => rune.children[1].children.length > 0));
 });
 
-test('chambers and local interaction state are independent', () => {
-  const first = createLocalGame();
-  const second = createLocalGame();
-
-  first.inspect(first.runes[0]);
-  first.inspect(first.ringGroup);
-
-  assert.notEqual(first.runes[0].material, second.runes[0].material);
-  assert.equal(second.ringGroup.rotation.y, 0);
-  second.inspect(second.runes[1]);
-  assert.match(second.ui.hint, /^1 of 3 runes activated/);
-});
-
-test('repeated rune inspection counts each rune only once', () => {
+test('rune activation changes only the correct glyph and a wrong order resets the visuals', () => {
   const game = createLocalGame();
-
-  game.inspect(game.runes[1]);
-  game.inspect(game.runes[1]);
-  assert.match(game.ui.hint, /^1 of 3 runes activated/);
-  assert.equal(game.runes[1].material, game.brass);
-  assert.equal(game.ui.notice.title, 'Rune 2');
-
-  game.inspect(game.runes[0]);
-  game.inspect(game.runes[2]);
-  assert.match(game.ui.hint, /^3 of 3 runes activated/);
+  const crown = game.rune('crown').children[1].children[0];
+  const river = game.rune('river').children[1].children[0];
+  const originalMaterial = crown.material;
+  game.inspect(game.target('chart'));
+  game.inspect(game.rune('crown'));
+  assert.notEqual(crown.material, originalMaterial);
+  assert.equal(river.material, originalMaterial);
+  game.inspect(game.rune('gate'));
+  assert.equal(crown.material, originalMaterial);
+  assert.deepEqual(game.ui.progress.activated, []);
+  assert.match(game.ui.notice.description, /wrong order/);
+  assert.match(game.ui.clues, /Crown → River → Gate/);
 });
 
-test('orrery inspection preserves rotation increments and hint progression', () => {
+test('chart inspection records a readable clue and premature alignment gives useful feedback', () => {
   const game = createLocalGame();
-
   game.inspect(game.ringGroup);
-  assert.equal(game.ringGroup.rotation.y, Math.PI / 4);
-  assert.equal(game.ringGroup.rotation.x, 0.08);
-  assert.match(game.ui.hint, /^The brass rings rotate/);
-
+  assert.match(game.ui.notice.description, /star chart/);
+  game.inspect(game.target('chart'));
+  assert.match(game.ui.clues, /Crown → River → Gate/);
+  game.inspect(game.rune('crown'));
   game.inspect(game.ringGroup);
+  assert.match(game.ui.notice.description, /current rune progress is unchanged/);
+  assert.deepEqual(game.getState().activated, ['crown']);
+});
+
+test('alignment opens a real doorway; exit interaction completes the chamber', () => {
+  const game = createLocalGame();
+  readyGame(game);
+  assert.equal(game.door.visible, true);
   game.inspect(game.ringGroup);
-  assert.equal(game.ringGroup.rotation.y, 3 * Math.PI / 4);
-  assert.equal(game.ringGroup.rotation.x, 0.24);
-  assert.match(game.ui.hint, /^The rings have shifted/);
+  assert.equal(game.door.visible, false);
+  assert.equal(game.exit.userData.title, 'Open Exit');
+  assert.equal(game.ui.isComplete(), false);
+  assert.notEqual(game.ringGroup.rotation.y, 0);
+  game.inspect(game.exit);
+  assert.equal(game.getState().completed, true);
+  assert.equal(game.ui.isComplete(), true);
 });
 
-test('star chart inspection records the existing journal clue and notice', () => {
+test('replay restores the seal, runes, orrery, journal, and completion state', () => {
   const game = createLocalGame();
-  const chart = game.interactables.find(object => object.userData.title === 'Star Chart');
-
-  game.inspect(chart);
-
-  assert.equal(game.ui.clues,
-    'Star Chart discovered: Crown → River → Gate. The three runes may follow this sequence.');
-  assert.equal(game.ui.hint, 'A clue has been added to your journal.');
-  assert.deepEqual(game.ui.notice, {
-    title: chart.userData.title,
-    description: chart.userData.description
-  });
+  const originalMaterial = game.rune('crown').children[1].children[0].material;
+  readyGame(game);
+  game.inspect(game.ringGroup);
+  game.inspect(game.exit);
+  game.reset();
+  assert.equal(game.door.visible, true);
+  assert.equal(game.exit.userData.title, 'Sealed Exit');
+  assert.equal(game.ringGroup.rotation.y, 0);
+  assert.equal(game.rune('crown').children[1].children[0].material, originalMaterial);
+  assert.equal(game.ui.clues, '');
+  assert.equal(game.ui.isComplete(), false);
+  assert.equal(game.getState().chartDiscovered, false);
 });
 
-test('placeholder puzzle remains unfinished; the refactor adds no win condition', () => {
-  const game = createLocalGame();
-  const door = game.scene.getObjectByName('sealed door');
-  const position = door.position.clone();
-
-  for (const rune of game.runes) game.inspect(rune);
-  for (let i = 0; i < 3; i++) game.inspect(game.ringGroup);
-
-  assert.equal(game.ui.hint,
-    'The mechanism stirs, but its correct sequence remains undiscovered.');
-  assert.deepEqual(door.position, position);
-  assert.equal(door.visible, true);
-});
-
-function createControlHarness(t, interactables = []) {
+function createControlHarness(t, { scene, interactables = [], ui = createTestUI(), onInspect } = {}) {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const document = new EventTarget();
   document.pointerLockElement = null;
@@ -127,22 +124,25 @@ function createControlHarness(t, interactables = []) {
   canvas.requestPointerLock = () => { document.pointerLockElement = canvas; };
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
   camera.position.set(0, 1.65, 5);
-  camera.updateMatrixWorld();
-  const ui = createTestUI();
   const inspected = [];
   const controls = createControls({
-    camera, canvas, interactables, ui,
-    onInspect(object) {
+    camera, canvas, scene, interactables, ui,
+    onInspect: onInspect ?? (object => {
       inspected.push(object);
       ui.showNotice(object.userData.title, object.userData.description);
-    }
+    })
   });
 
-  function send(type, properties) {
+  function send(type, properties = {}) {
     document.dispatchEvent(Object.assign(new Event(type), properties));
   }
 
-  return { document, canvas, camera, ui, controls, inspected, send };
+  function press(code) {
+    send('keydown', { code });
+    send('keyup', { code });
+  }
+
+  return { document, canvas, camera, ui, controls, inspected, send, press };
 }
 
 test('movement requires entry and pointer lock', t => {
@@ -150,35 +150,37 @@ test('movement requires entry and pointer lock', t => {
   send('keydown', { code: 'KeyW' });
   controls.update();
   assert.equal(camera.position.z, 5);
-
   controls.enter();
   document.pointerLockElement = null;
+  send('keydown', { code: 'KeyW' });
   controls.update();
   assert.equal(camera.position.z, 5);
 });
 
-test('movement retains the baseline step size and normalized diagonals', t => {
+test('movement is frame-rate-independent with normalized diagonals', t => {
   const { camera, controls, send } = createControlHarness(t);
   controls.enter();
   const start = camera.position.clone();
-  send('keydown', { code: 'KeyW' });
-  send('keydown', { code: 'KeyD' });
-  for (let i = 0; i < 60; i++) controls.update();
-
-  assert.ok(Math.abs(camera.position.distanceTo(start) - 3) < 1e-10);
-  send('keyup', { code: 'KeyW' });
-  send('keyup', { code: 'KeyD' });
-  const stopped = camera.position.clone();
-  controls.update();
-  assert.deepEqual(camera.position, stopped);
+  function move(frames) {
+    send('keydown', { code: 'KeyW' });
+    send('keydown', { code: 'KeyD' });
+    for (let i = 0; i < frames; i++) controls.update(1 / frames);
+    send('keyup', { code: 'KeyW' });
+    send('keyup', { code: 'KeyD' });
+    assert.ok(Math.abs(camera.position.distanceTo(start) - 3) < 1e-10);
+  }
+  move(30);
+  controls.restart();
+  move(120);
 });
 
-test('movement remains bounded by the chamber walls', t => {
+test('movement stays within the chamber and large frame delays are capped', t => {
   const { camera, controls, send } = createControlHarness(t);
   controls.enter();
   send('keydown', { code: 'KeyW' });
+  controls.update(10);
+  assert.ok(Math.abs(camera.position.z - 4.88) < 1e-10);
   for (let i = 0; i < 300; i++) controls.update();
-
   assert.equal(camera.position.z, -5.4);
   assert.equal(camera.position.y, 1.65);
 });
@@ -189,38 +191,117 @@ test('mouse look requires pointer lock and clamps pitch', t => {
   assert.equal(camera.rotation.y, 0);
   controls.enter();
   send('mousemove', { movementX: 100, movementY: 10000 });
-
-  assert.equal(camera.rotation.order, 'YXZ');
   assert.equal(camera.rotation.y, -0.2);
   assert.equal(camera.rotation.x, -1.35);
 });
 
-test('nearby targeting, inspection, and dismissal remain wired together', t => {
+test('notices pause movement/look, repeated E is ignored, and hints are preserved', t => {
   const target = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
   target.position.set(0, 1.65, 3);
   target.userData = { interactable: true, title: 'Test artifact', description: 'A clue.' };
   target.updateMatrixWorld();
-  const { ui, controls, inspected, send } = createControlHarness(t, [target]);
+  const { ui, camera, controls, inspected, send, press } = createControlHarness(t, { interactables: [target] });
   controls.enter();
+  ui.setHint('Persistent progress feedback');
   controls.update();
-  assert.equal(ui.hint, 'Press E to inspect: Test artifact');
-
-  send('keydown', { code: 'KeyE' });
-  assert.deepEqual(inspected, [target]);
+  assert.equal(ui.target, 'Press E: Test artifact');
+  assert.equal(ui.hint, 'Persistent progress feedback');
+  press('KeyE');
+  assert.equal(inspected.length, 1);
+  const position = camera.position.clone();
+  send('keydown', { code: 'KeyW' });
+  send('mousemove', { movementX: 50, movementY: 50 });
+  send('keydown', { code: 'KeyE', repeat: true });
+  controls.update();
   assert.equal(ui.isNoticeOpen(), true);
-  send('keydown', { code: 'KeyE' });
+  assert.deepEqual(camera.position, position);
+  assert.equal(camera.rotation.y, 0);
+  press('KeyE');
+  controls.update();
   assert.equal(ui.isNoticeOpen(), false);
   assert.equal(inspected.length, 1);
+  assert.deepEqual(camera.position, position);
+});
+
+test('pointer unlock and page visibility changes clear held movement keys', t => {
+  const { document, canvas, camera, controls, send } = createControlHarness(t);
+  controls.enter();
+  send('keydown', { code: 'KeyW' });
+  document.pointerLockElement = null;
+  send('pointerlockchange');
+  document.pointerLockElement = canvas;
+  controls.update();
+  assert.equal(camera.position.z, 5);
+  send('keydown', { code: 'KeyW' });
+  send('visibilitychange');
+  controls.update();
+  assert.equal(camera.position.z, 5);
+});
+
+test('solid scenery blocks inspection while invisible scenery does not', t => {
+  const scene = new THREE.Scene();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2));
+  wall.position.set(0, 1.65, 4);
+  const target = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2));
+  target.position.set(0, 1.65, 3);
+  target.userData = { interactable: true, title: 'Hidden artifact' };
+  scene.add(wall, target);
+  const { controls, inspected, press } = createControlHarness(t, { scene });
+  controls.enter();
+  press('KeyE');
+  assert.equal(inspected.length, 0);
+  wall.visible = false;
+  press('KeyE');
+  assert.equal(inspected.length, 1);
+});
+
+test('completion blocks input and replay resets position and view', t => {
+  const { ui, camera, controls, send } = createControlHarness(t);
+  controls.enter();
+  ui.showCompletion();
+  send('keydown', { code: 'KeyW' });
+  send('mousemove', { movementX: 50, movementY: 50 });
+  controls.update();
+  assert.equal(camera.position.z, 5);
+  assert.equal(camera.rotation.y, 0);
+  camera.position.set(3, 1.65, -3);
+  ui.resetPuzzle();
+  controls.restart();
+  assert.deepEqual(camera.position.toArray(), [0, 1.65, 5]);
+  assert.equal(camera.rotation.y, 0);
 });
 
 test('distant objects cannot be inspected', t => {
   const target = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
   target.userData = { interactable: true, title: 'Distant artifact' };
   target.updateMatrixWorld();
-  const { controls, inspected, send } = createControlHarness(t, [target]);
+  const { controls, inspected, press } = createControlHarness(t, { interactables: [target] });
   controls.enter();
-  controls.update();
-  send('keydown', { code: 'KeyE' });
-
+  press('KeyE');
   assert.equal(inspected.length, 0);
+});
+
+test('the complete chamber can be solved through real scene raycasts and E input', t => {
+  const game = createLocalGame();
+  const { camera, controls, press } = createControlHarness(t, {
+    scene: game.scene, ui: game.ui, onInspect: game.inspect
+  });
+  controls.enter();
+  function inspectFrom(position, target) {
+    camera.position.set(...position);
+    camera.lookAt(target);
+    controls.update();
+    assert.notEqual(game.ui.target, '');
+    press('KeyE');
+    if (!game.ui.isComplete()) press('KeyE');
+  }
+  inspectFrom([-3, 1.65, -2.5], new THREE.Vector3(-5.72, 1.65, -2.5));
+  for (const runeId of RUNE_SEQUENCE) {
+    const rune = game.rune(runeId);
+    inspectFrom([3, 1.65, rune.position.z], rune.position);
+  }
+  inspectFrom([0, 1.65, 3], game.ringGroup.position);
+  inspectFrom([0, 1.65, -4.5], new THREE.Vector3(0, 1.65, -7.4));
+  assert.equal(game.getState().completed, true);
+  assert.equal(game.ui.isComplete(), true);
 });
