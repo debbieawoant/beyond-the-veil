@@ -1,0 +1,16 @@
+# Installed dependencies and generated builds (never needed for source uploads)
+node_modules/
+dist/
+coverage/
+.vite/
+.wrangler/
+
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.log
+.DS_Store
+Thumbs.db

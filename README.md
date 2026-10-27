@@ -356,4 +356,148 @@ The interface or visual presence of a feature does not mean its underlying funct
 - [ ] Complete and test the first chapter.
 - [ ] Add additional chambers and narrative discoveries.
 - [ ] Optimize performance across supported browsers.
-- [ ] Document deployment, testing
+- [x] Document development setup, manual deployment, and baseline testing.
+
+## Getting Started
+
+### Development requirements
+
+- **Node.js 24 LTS** and **npm 11** for installing dependencies, running tests, and building the site. The tested versions are Node **24.22.1** and npm **11.19.1**; the app's `.nvmrc` records the Node version.
+- A desktop browser with WebGL 2 support, a keyboard, and a mouse to play the current prototype.
+
+Node is **development tooling, not a game server**. The built game runs in the browser. Players and contributors who only upload an already-built site do not need Node.
+
+Use a Node version manager if you already have one, or install the appropriate version from [nodejs.org](https://nodejs.org/en/download). Keep the Node runtime and its bundled npm outside the repository, and do not use `sudo npm install`. Vite is installed locally in the ignored `node_modules/` folder by `npm ci`; no global Vite installation is needed.
+
+### Run locally
+
+On Linux/macOS, the executable launcher can start a playtest from the repository root:
+
+```sh
+./playtest.sh
+```
+
+It uses Node/npm on your PATH, or the temporary portable Node installation if available in this workspace. It installs locked dependencies if Vite is missing, then starts a localhost-only development server. It does not download Node or change system settings. Extra Vite arguments can be passed through, for example `./playtest.sh --port 5174`. If Node is missing or incompatible, use the manual setup below.
+
+For double-click launching on this KDE workstation, use **`Play Beyond the Veil.desktop`** in the repository root, rather than the `.sh` file. If KDE asks, approve launching/executing it. It opens Konsole, starts the server, and opens the browser automatically; Konsole stays open to show any errors. Stop the server with Ctrl+C. This shortcut records this workstation's absolute project path and requires Konsole; update its `Exec` entry if the project moves. No desktop settings or application registrations are changed.
+
+From the repository root (the folder containing this README), enter the **nested application folder**:
+
+```sh
+cd beyond-the-veil
+```
+
+If using `nvm`, select the recorded version first:
+
+```sh
+nvm install
+nvm use
+```
+
+Then install the locked dependencies and start the development server:
+
+```sh
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite, normally `http://localhost:5173`. Stop the server with Ctrl+C. Do not open the source `index.html` directly: its JavaScript imports and CSS need Vite's development server or a production build.
+
+`package-lock.json` is tracked so collaborators get the same dependency versions. Use `npm ci` for normal setup; use `npm install` only when intentionally updating dependencies, and review the resulting lockfile changes. Development dependencies must be included because Vite is the build tool.
+
+For the tested npm version, `package.json` also approves only the reviewed `esbuild@0.28.2` installation script, which prepares and validates Vite's platform-specific build binary. Review new install scripts and update that pinned approval deliberately when upgrading dependencies; do not blanket-approve all scripts.
+
+### Code organization
+
+All paths below are relative to the application folder:
+
+| File | Responsibility |
+|---|---|
+| `src/main.js` | Camera, renderer, animation loop, resizing, and module wiring |
+| `src/scene.js` | Chamber geometry, lighting, materials, and inspectable objects |
+| `src/controls.js` | Keyboard input, mouse look, movement, and targeting |
+| `src/interactions.js` | Local prototype interaction state and inspection effects |
+| `src/ui.js` | Start screen, class selection, party placeholder, journal, hints, and notices |
+| `src/style.css` | Existing visual styling and layout |
+| `test/prototype.test.js` | Baseline scene, interaction, and control regression tests |
+
+This is a behavior-preserving split of the original prototype, not a new puzzle or multiplayer implementation. There is no backend, Supabase configuration, or required environment variable yet.
+
+### Automated checks
+
+Run these commands from the application folder:
+
+```sh
+npm test
+npm run build
+npm audit
+```
+
+Tests use Node's built-in test runner, without an additional test dependency. They check scene structure, independent local state, rune activation counts, orrery rotation, journal updates, movement gating and bounds, mouse-look limits, and targeting/inspection. Some assertions deliberately record incomplete prototype behavior; update them when implementing the corresponding planned feature.
+
+These checks do not replace play-testing: they do not test WebGL rendering, real pointer-lock permission, accessibility, Cloudflare settings, or multiplayer.
+
+### Production build and preview
+
+```sh
+npm run build
+npm run preview
+```
+
+Open the URL printed by Vite, normally `http://localhost:4173`. `preview` is for local verification, not a production hosting server. Each build creates the deployable site in `beyond-the-veil/dist/`, relative to the repository root:
+
+```text
+dist/
+  index.html
+  assets/
+    index-<hash>.js
+    index-<hash>.css
+```
+
+`node_modules/` and `dist/` are ignored by Git. Installed dependencies are only needed on a build machine; **only the contents of `dist/` are uploaded to the static host**. The site currently loads optional Google Fonts externally, with local fallback fonts defined in CSS.
+
+### Manual upload to Cloudflare
+
+The current prototype URL is <https://beyond-the-veil.debbieannwoantoine.workers.dev/>. Keep the existing Cloudflare host for now; choosing Supabase for multiplayer would not by itself require moving the frontend.
+
+1. On a build machine, run `npm ci`, `npm test`, and `npm run build` from the application folder.
+2. Check the production build with `npm run preview` and the manual checklist below.
+3. Give the contributor the **complete contents of `dist/`**, either as a folder or a ZIP whose top level contains `index.html` and `assets/`. They can upload those built files without installing Node.
+4. The Cloudflare account owner should publish these files through the existing Worker's static-asset deployment workflow. Upload HTML, JS, and CSS together so their hashed filenames match. Do not upload `src/`, the source `index.html`, `node_modules/`, credentials, or the repository ZIP as the website.
+5. Open the public HTTPS URL in a fresh browser session and repeat the checklist. Confirm that requests for `/assets/…` return actual JS/CSS, not an HTML fallback or a 404.
+
+The account's existing upload mechanism, dashboard controls, and build integration have **not** been confirmed. No account settings were changed and no deployment was performed as part of the baseline work. If the existing workflow does not accept an asset folder/ZIP, confirm the owner's deployment method rather than replacing the Worker or creating another site. Cloudflare's [static assets guide](https://developers.cloudflare.com/workers/static-assets/get-started/) documents CLI deployment as an alternative; Wrangler is not a dependency of this app.
+
+For a future Git-connected build, the application/root directory is `beyond-the-veil`, dependency installation is `npm ci`, and the build command is `npm run build`. The static asset directory is `dist` relative to that application directory. These are build inputs, not a claim that Git integration is currently configured.
+
+### Manual test checklist
+
+- Start screen, class dropdown, and HUD load without JavaScript errors or missing assets.
+- Choose a class and enter; the entry hint names the selected class.
+- Confirm the chamber and celestial mechanism render.
+- Move with WASD and look with the mouse after allowing pointer lock.
+- Press Escape to release the pointer; click the canvas to capture it again.
+- Approach the orrery, aim at it, press E to inspect, and press E again to dismiss.
+- Resize the browser and check that the canvas and overlays remain usable.
+- Repeat on the uploaded build; record browser, device, steps, expected outcome, and actual outcome for failures.
+
+### Baseline verification and known limitations
+
+On **2026-10-26**, a production build of the original, pre-refactor code matched the public deployment's HTML, JavaScript, and CSS **byte-for-byte**. The corresponding asset filenames were `index-BBLorQlz.js` and `index-ClVH_mX4.css`. Module changes can legitimately produce a different JavaScript filename; that does not update the public deployment automatically.
+
+The baseline work intentionally leaves these existing gameplay issues unchanged:
+
+- The puzzle has no validated sequence, opening exit, or win condition.
+- Runes and the star chart are created and registered as interaction targets but never attached to the rendered scene. Fix their visibility and targeting during the puzzle milestone.
+- Movement is frame-rate-dependent; collision only clamps the player's position to the room bounds.
+- Inspection notices do not pause movement or mouse look; repeated E events and focus changes need better input handling.
+- Class abilities, actual party membership, multiplayer, and touch controls are not implemented.
+
+## Contributing and Future Development
+
+- Agree on a plan before implementing gameplay, architecture, or hosting changes.
+- Keep changes focused and preserve the existing game direction. Validate behavior before marking a feature implemented.
+- Run automated checks and the relevant manual tests before sharing a build.
+- Share source through Git and built upload files separately. Do not commit Node installations, `node_modules/`, `dist/`, or local secrets.
+- When intentionally changing dependencies or the supported Node/npm versions, update the lockfile and version documentation together and verify a fresh `npm ci` build.
+- Multiplayer/backend selection remains a separate decision. Never put server secrets or Supabase service-role keys in browser code; secure shared-state updates must be designed and tested before integration.

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Play Beyond the Veil
+Comment=Start the local playtest in a terminal and open the game in your browser
+Exec=konsole --hold -e /bin/bash "/home/arthura/AI/projects/beyond-the-veil/playtest.sh" --open
+Icon=applications-games
+Terminal=false
+Categories=Game;
+StartupNotify=true
