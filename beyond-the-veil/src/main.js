@@ -33,7 +33,9 @@ const controls = createControls({
   scene,
   interactables,
   ui,
-  onInspect: interactions.inspect
+  onInspect: interactions.inspect,
+  isExitOpen: () => interactions.getState().unlocked,
+  onExit: interactions.crossExit
 });
 ui.onEnter(() => controls.enter());
 ui.onRestart(() => {

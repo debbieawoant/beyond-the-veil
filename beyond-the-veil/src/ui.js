@@ -50,7 +50,7 @@ export function createUI(app) {
       <div class="muted">A COOPERATIVE FANTASY ESCAPE ROOM</div>
       <h1>Beyond the Veil</h1>
       <p>You awaken beneath an unfamiliar sky. A celestial mechanism hums in the darkness. Somewhere beyond this chamber lies the path home.</p>
-      <p>Read the star chart on the west (left-hand) wall. Use its clue to activate the three runes on the east wall in order, then align the central orrery and leave through the northern exit.</p>
+      <p>Read the star chart on the west (left-hand) wall. Use its clue to activate the three runes on the east wall in order, then align the central orrery and walk through the northern exit to complete the chamber.</p>
       <p class="muted">An incorrect rune resets the sequence; you can retry freely. Repeating an active rune is safe. Classes are cosmetic in this local playtest; multiplayer comes later.</p>
       <div id="classes"></div>
       <button id="enter">Enter the chamber</button>
@@ -127,7 +127,7 @@ export function createUI(app) {
       app.querySelector('#progress').textContent =
         `Runes: ${state.activated.length} / 3${sequence ? ` · ${sequence}` : ''}`;
       app.querySelector('#objective').textContent = state.completed ? 'Chapter I complete'
-        : state.unlocked ? 'Leave through the glowing northern doorway (E)'
+        : state.unlocked ? 'Walk through the glowing northern doorway'
         : state.activated.length === 3 ? 'Align the central celestial orrery (E)'
         : state.chartDiscovered ? 'Activate the runes in the chart\'s order (E)'
         : 'Read the star chart on the west wall (E)';

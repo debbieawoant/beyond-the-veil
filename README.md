@@ -179,7 +179,7 @@ The chapter should establish the tone of the game: quiet tension, discovery, anc
 2. Activate the east-wall symbols in the order **Crown → River → Gate**. The Crown has three points, the River has two waves, and the Gate is an arch. Their physical arrangement is not the solution order.
 3. A wrong rune resets all rune progress, but keeps the journal clue. Repeating an already-active rune is safe. Activated runes glow gold instead of blue.
 4. With all three runes active, inspect the central **Celestial Orrery** to align its rings and open the northern exit. Early orrery use does not erase progress.
-5. Approach the glowing open doorway and press **E** to leave and complete the chamber.
+5. **Walk through the glowing open doorway** to complete the chamber automatically when you cross its threshold. E only inspects the doorway; it no longer completes the chamber from a distance.
 6. Choose **Play again** to reset the puzzle, journal, door, and player view. Progress is local and is not saved across reloads.
 
 Use WASD to move, the mouse to look, and E to interact or dismiss an inspection. A crosshair and separate targeting prompt identify what E will affect; inspection notices pause movement and mouse look. Escape releases the mouse; after closing a notice, click the scene to capture it again. Every class can complete this local puzzle because class abilities are not active yet.
@@ -450,7 +450,7 @@ npm run build
 npm audit
 ```
 
-Tests use Node's built-in test runner, without an additional test dependency. The 27 tests cover scene structure and target visibility, puzzle prerequisites and order, invalid and repeated actions, retries, completion, replay, journal updates, elapsed-time movement, inspection/focus input guards, occlusion, targeting range, and an entire solve using actual scene raycasts and E input.
+Tests use Node's built-in test runner, without an additional test dependency. The 35 tests cover scene structure and target visibility, puzzle prerequisites and order, invalid and repeated actions, retries, completion, replay, journal updates, elapsed-time movement, inspection/focus input guards, occlusion, targeting range, and an entire solve using actual scene raycasts and movement through the exit. Doorway regressions cover sealed/open passage, adjacent walls, diagonal approaches, passage sides, one-time threshold completion, and restoring the barrier on replay.
 
 These checks do not replace play-testing: they do not test WebGL rendering, real pointer-lock permission, accessibility, Cloudflare settings, or multiplayer.
 
@@ -499,8 +499,9 @@ For a future Git-connected build, the application/root directory is `beyond-the-
 - Inspect the chart on the west wall; confirm that its inscription appears in the journal.
 - On the east wall, try Gate first: confirm the wrong-order notice and zero rune progress. The journal should remain intact.
 - Activate Crown, River, then Gate; check their distinct shapes, gold activation feedback, and the progress display. Repeating an active rune should not advance or reset the sequence.
-- Use the orrery to open the north-wall exit. Approach the glowing doorway and press E; verify the completion screen and released mouse.
-- Click Play again; confirm a fresh camera position, empty journal, blue runes, sealed exit, and a working second attempt.
+- Before unlocking, try walking through the sealed northern doorway; confirm that it blocks passage and does not complete the chamber.
+- Use the orrery to open the north-wall exit. Inspecting the open doorway with E should only explain how to leave. Dismiss the notice and walk through the opening; verify automatic completion past the threshold and released mouse capture. Walls beside the doorway and the passage sides should still block movement.
+- Click Play again; confirm a fresh camera position, empty journal, blue runes, sealed exit, and a working second attempt. The doorway must block walking again until unlocked.
 - While inspecting, confirm that movement/look are paused and holding E does not immediately dismiss the notice. Escape/focus changes should not leave movement keys stuck.
 - Resize the browser and check that the canvas and overlays remain usable.
 - Repeat on the uploaded build; record browser, device, steps, expected outcome, and actual outcome for failures.
@@ -509,11 +510,11 @@ For a future Git-connected build, the application/root directory is `beyond-the-
 
 On **2026-10-26**, a production build of the original, pre-refactor code matched the public deployment's HTML, JavaScript, and CSS **byte-for-byte**. The corresponding asset filenames were `index-BBLorQlz.js` and `index-ClVH_mX4.css`. Module changes can legitimately produce a different JavaScript filename; that does not update the public deployment automatically.
 
-The new local puzzle passes 27 Node tests and a headless Firefox playthrough covering a wrong sequence, the full successful sequence, an opening exit, completion, and replay, with no JavaScript errors. The browser check used real WebGL rendering with deterministic frame timing and simulated pointer capture; real desktop mouse-capture permission and human usability still need manual play-testing.
+The local puzzle passes 35 Node tests and a headless Firefox playthrough covering a wrong sequence, the full successful sequence, sealed-door blocking, walk-through exit completion, and replay, with no JavaScript errors. The browser check used real WebGL rendering with deterministic frame timing and simulated pointer capture; real desktop mouse-capture permission and human usability still need manual play-testing.
 
 Remaining limitations:
 
-- Collision only clamps the player's position to the room bounds; pillars and the pedestal do not yet block movement.
+- Movement is bounded by the room and the narrow exit passage, which opens only after unlocking. Pillars and the pedestal do not yet block movement.
 - Class abilities, actual party membership, multiplayer, and touch controls are not implemented.
 - Progress is in memory only. Additional chapters, audio, and broader accessibility/performance work remain planned.
 - The existing public deployment is not automatically updated by local edits or builds.

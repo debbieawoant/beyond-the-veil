@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 
-export function createControls({ camera, canvas, scene, interactables, ui, onInspect }) {
+const ROOM_LIMIT = 5.4;
+// The rendered opening is 2.8 units wide. Leave space for the player's body.
+const PASSAGE_HALF_WIDTH = 1.1;
+const PASSAGE_END_Z = -7.1;
+const EXIT_THRESHOLD_Z = -6.25;
+
+export function createControls({
+  camera, canvas, scene, interactables, ui, onInspect,
+  isExitOpen = () => false, onExit = () => {}
+}) {
   let yaw = 0;
   let pitch = 0;
   const keys = {};
@@ -105,17 +114,29 @@ export function createControls({ camera, canvas, scene, interactables, ui, onIns
     if (keys.KeyD) movement.add(right);
     if (keys.KeyA) movement.sub(right);
 
-    if (movement.lengthSq() > 0) {
-      movement.normalize().multiplyScalar(speed);
-      camera.position.add(movement);
-    }
+    if (movement.lengthSq() > 0) movement.normalize().multiplyScalar(speed);
 
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -5.4, 5.4);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -5.4, 5.4);
+    const previousZ = camera.position.z;
+    const exitOpen = isExitOpen();
+    // Resolve X first so diagonal movement cannot cut through a passage side.
+    const xLimit = previousZ < -ROOM_LIMIT ? PASSAGE_HALF_WIDTH : ROOM_LIMIT;
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x + movement.x, -xLimit, xLimit);
+    const inDoorway = Math.abs(camera.position.x) <= PASSAGE_HALF_WIDTH;
+    const northLimit = exitOpen && inDoorway ? PASSAGE_END_Z : -ROOM_LIMIT;
+    camera.position.z = THREE.MathUtils.clamp(previousZ + movement.z, northLimit, ROOM_LIMIT);
     camera.position.y = 1.65;
 
+    if (exitOpen && inDoorway && previousZ > EXIT_THRESHOLD_Z
+      && camera.position.z <= EXIT_THRESHOLD_Z) {
+      onExit();
+      clearInput();
+      return;
+    }
+
     const target = findTarget();
-    ui.setTarget(target ? `Press E: ${target.userData.title}` : '');
+    ui.setTarget(target?.userData.type === 'exit' && exitOpen
+      ? 'Walk through the doorway to leave'
+      : target ? `Press E: ${target.userData.title}` : '');
   }
 
   function enter() {

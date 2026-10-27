@@ -10,11 +10,19 @@ export function createInteractions({ setPuzzleState, ui }) {
 
   function inspect(object) {
     const { type, title, description, runeId } = object.userData;
+    if (type === 'exit') {
+      const message = puzzle.getState().unlocked
+        ? 'Walk through the glowing doorway to leave. Crossing the threshold completes the chamber; pressing E only inspects it.'
+        : 'The exit is sealed. Read the star chart on the west wall, awaken the three runes in its order, then align the central orrery.';
+      ui.setHint(message);
+      ui.showNotice(title, message);
+      return;
+    }
+
     const actions = {
       chart: { type: 'read-chart' },
       rune: { type: 'activate-rune', runeId },
-      orrery: { type: 'align-orrery' },
-      exit: { type: 'exit' }
+      orrery: { type: 'align-orrery' }
     };
     if (!actions[type]) return;
 
@@ -46,13 +54,10 @@ export function createInteractions({ setPuzzleState, ui }) {
         message = 'The rings resist your touch. Activate all three runes in the order recorded in your journal first. Your current rune progress is unchanged.';
         break;
       case 'unlocked':
-        message = 'The rings align and the stone seal withdraws. The exit on the north wall is open. Approach the glowing doorway and press E to leave.';
+        message = 'The rings align and the stone seal withdraws. The exit on the north wall is open. Walk through the glowing doorway to leave.';
         break;
       case 'already-unlocked':
-        message = 'The exit is already open. Approach the glowing doorway on the north wall and press E to leave.';
-        break;
-      case 'locked':
-        message = 'The exit is sealed. Read the star chart on the west wall, awaken the three runes in its order, then align the central orrery.';
+        message = 'The exit is already open. Walk through the glowing doorway on the north wall to leave.';
         break;
       case 'completed':
         ui.setHint('The chamber is complete. The path home is open.');
@@ -66,6 +71,16 @@ export function createInteractions({ setPuzzleState, ui }) {
     ui.showNotice(title, message);
   }
 
+  function crossExit() {
+    if (puzzle.getState().completed) return false;
+    const result = puzzle.act({ type: 'exit' });
+    if (result.type !== 'completed') return false;
+    render(result.state);
+    ui.setHint('The chamber is complete. The path home is open.');
+    ui.showCompletion();
+    return true;
+  }
+
   function reset() {
     const { state } = puzzle.act({ type: 'reset' });
     ui.resetPuzzle();
@@ -73,5 +88,5 @@ export function createInteractions({ setPuzzleState, ui }) {
   }
 
   render(puzzle.getState());
-  return { inspect, reset, getState: puzzle.getState };
+  return { inspect, crossExit, reset, getState: puzzle.getState };
 }

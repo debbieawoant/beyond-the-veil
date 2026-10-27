@@ -80,7 +80,7 @@ test('chart inspection records a readable clue and premature alignment gives use
   assert.deepEqual(game.getState().activated, ['crown']);
 });
 
-test('alignment opens a real doorway; exit interaction completes the chamber', () => {
+test('alignment opens the doorway, but inspecting it cannot complete the chamber', () => {
   const game = createLocalGame();
   readyGame(game);
   assert.equal(game.door.visible, true);
@@ -90,6 +90,9 @@ test('alignment opens a real doorway; exit interaction completes the chamber', (
   assert.equal(game.ui.isComplete(), false);
   assert.notEqual(game.ringGroup.rotation.y, 0);
   game.inspect(game.exit);
+  assert.equal(game.getState().completed, false);
+  assert.match(game.ui.notice.description, /Walk through/);
+  game.crossExit();
   assert.equal(game.getState().completed, true);
   assert.equal(game.ui.isComplete(), true);
 });
@@ -99,7 +102,7 @@ test('replay restores the seal, runes, orrery, journal, and completion state', (
   const originalMaterial = game.rune('crown').children[1].children[0].material;
   readyGame(game);
   game.inspect(game.ringGroup);
-  game.inspect(game.exit);
+  game.crossExit();
   game.reset();
   assert.equal(game.door.visible, true);
   assert.equal(game.exit.userData.title, 'Sealed Exit');
@@ -110,7 +113,9 @@ test('replay restores the seal, runes, orrery, journal, and completion state', (
   assert.equal(game.getState().chartDiscovered, false);
 });
 
-function createControlHarness(t, { scene, interactables = [], ui = createTestUI(), onInspect } = {}) {
+function createControlHarness(t, {
+  scene, interactables = [], ui = createTestUI(), onInspect, isExitOpen, onExit
+} = {}) {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const document = new EventTarget();
   document.pointerLockElement = null;
@@ -126,7 +131,7 @@ function createControlHarness(t, { scene, interactables = [], ui = createTestUI(
   camera.position.set(0, 1.65, 5);
   const inspected = [];
   const controls = createControls({
-    camera, canvas, scene, interactables, ui,
+    camera, canvas, scene, interactables, ui, isExitOpen, onExit,
     onInspect: onInspect ?? (object => {
       inspected.push(object);
       ui.showNotice(object.userData.title, object.userData.description);
@@ -281,10 +286,129 @@ test('distant objects cannot be inspected', t => {
   assert.equal(inspected.length, 0);
 });
 
-test('the complete chamber can be solved through real scene raycasts and E input', t => {
+test('the sealed doorway blocks walking and cannot trigger completion', t => {
   const game = createLocalGame();
-  const { camera, controls, press } = createControlHarness(t, {
-    scene: game.scene, ui: game.ui, onInspect: game.inspect
+  const { camera, controls, send } = createControlHarness(t, {
+    ui: game.ui, isExitOpen: () => game.getState().unlocked, onExit: game.crossExit
+  });
+  controls.enter();
+  camera.position.set(0, 1.65, -5.3);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 60; i++) controls.update();
+  assert.equal(camera.position.z, -5.4);
+  assert.equal(game.getState().completed, false);
+  assert.equal(game.crossExit(), false);
+  assert.equal(game.ui.isComplete(), false);
+});
+
+test('walking through an unlocked doorway completes only after crossing its threshold', t => {
+  const game = createLocalGame();
+  readyGame(game);
+  game.inspect(game.ringGroup);
+  game.ui.hideNotice();
+  const { camera, controls, send } = createControlHarness(t, {
+    ui: game.ui, isExitOpen: () => game.getState().unlocked, onExit: game.crossExit
+  });
+  controls.enter();
+  camera.position.set(0, 1.65, -5.3);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 10; i++) controls.update();
+  assert.ok(camera.position.z < -5.4);
+  assert.ok(camera.position.z > -6.25);
+  assert.equal(game.ui.isComplete(), false);
+  for (let i = 0; i < 30; i++) controls.update();
+  assert.ok(camera.position.z <= -6.25);
+  assert.equal(game.getState().completed, true);
+  assert.equal(game.ui.isComplete(), true);
+});
+
+for (const x of [-1.2, 1.2]) {
+  test(`unlocking the doorway does not allow passing through the adjacent wall at x=${x}`, t => {
+    let crossings = 0;
+    const { camera, controls, send } = createControlHarness(t, {
+      isExitOpen: () => true, onExit: () => { crossings++; }
+    });
+    controls.enter();
+    camera.position.set(x, 1.65, -5.3);
+    send('keydown', { code: 'KeyW' });
+    for (let i = 0; i < 60; i++) controls.update();
+    assert.equal(camera.position.z, -5.4);
+    assert.equal(crossings, 0);
+  });
+}
+
+test('the passage sides block sideways movement and still allow returning to the room', t => {
+  const { camera, controls, send } = createControlHarness(t, { isExitOpen: () => true });
+  controls.enter();
+  camera.position.set(0, 1.65, -5.8);
+  send('keydown', { code: 'KeyD' });
+  for (let i = 0; i < 60; i++) controls.update();
+  send('keyup', { code: 'KeyD' });
+  assert.equal(camera.position.x, 1.1);
+  assert.equal(camera.position.z, -5.8);
+  send('keydown', { code: 'KeyS' });
+  for (let i = 0; i < 20; i++) controls.update();
+  send('keyup', { code: 'KeyS' });
+  assert.ok(camera.position.z > -5.4);
+  send('keydown', { code: 'KeyD' });
+  for (let i = 0; i < 20; i++) controls.update();
+  assert.ok(camera.position.x > 1.1);
+});
+
+test('diagonal approaches cannot cut through the wall beside the open doorway', t => {
+  let crossings = 0;
+  const { camera, controls, send } = createControlHarness(t, {
+    isExitOpen: () => true, onExit: () => { crossings++; }
+  });
+  controls.enter();
+  camera.position.set(1.08, 1.65, -5.35);
+  send('keydown', { code: 'KeyW' });
+  send('keydown', { code: 'KeyD' });
+  for (let i = 0; i < 30; i++) controls.update();
+  assert.equal(camera.position.z, -5.4);
+  assert.equal(crossings, 0);
+});
+
+test('threshold completion fires once and the far end of the passage remains bounded', t => {
+  let crossings = 0;
+  const { camera, controls, send } = createControlHarness(t, {
+    isExitOpen: () => true, onExit: () => { crossings++; }
+  });
+  controls.enter();
+  camera.position.set(0, 1.65, -6.2);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 5; i++) controls.update();
+  assert.equal(crossings, 1);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 60; i++) controls.update();
+  assert.equal(camera.position.z, -7.1);
+  assert.equal(crossings, 1);
+});
+
+test('replay restores the movement barrier as well as resetting the player', t => {
+  const game = createLocalGame();
+  readyGame(game);
+  game.inspect(game.ringGroup);
+  game.crossExit();
+  const { camera, controls, send } = createControlHarness(t, {
+    ui: game.ui, isExitOpen: () => game.getState().unlocked, onExit: game.crossExit
+  });
+  game.reset();
+  controls.restart();
+  assert.deepEqual(camera.position.toArray(), [0, 1.65, 5]);
+  camera.position.set(0, 1.65, -5.3);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 60; i++) controls.update();
+  assert.equal(camera.position.z, -5.4);
+  assert.equal(game.door.visible, true);
+  assert.equal(game.ui.isComplete(), false);
+});
+
+test('the chamber can be solved through real scene raycasts and walking through the exit', t => {
+  const game = createLocalGame();
+  const { camera, controls, press, send } = createControlHarness(t, {
+    scene: game.scene, ui: game.ui, onInspect: game.inspect,
+    isExitOpen: () => game.getState().unlocked, onExit: game.crossExit
   });
   controls.enter();
   function inspectFrom(position, target) {
@@ -302,6 +426,9 @@ test('the complete chamber can be solved through real scene raycasts and E input
   }
   inspectFrom([0, 1.65, 3], game.ringGroup.position);
   inspectFrom([0, 1.65, -4.5], new THREE.Vector3(0, 1.65, -7.4));
+  assert.equal(game.ui.isComplete(), false);
+  send('keydown', { code: 'KeyW' });
+  for (let i = 0; i < 60; i++) controls.update();
   assert.equal(game.getState().completed, true);
   assert.equal(game.ui.isComplete(), true);
 });
