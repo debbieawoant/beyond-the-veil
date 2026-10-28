@@ -26,6 +26,22 @@ button {
 }
 
 button:hover { background: #414653; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.room-setup { margin-top: 16px; text-align: left; border-top: 1px solid #71634d; padding-top: 12px; }
+.room-setup label { display: block; font-size: 12px; margin-top: 12px; }
+.room-setup input {
+  width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #75664d;
+  border-radius: 6px; background: #252b37; color: #eee; font: inherit;
+}
+#room-code { text-transform: uppercase; letter-spacing: 2px; }
+#lobby-status { margin-top: 12px; font-size: 12px; line-height: 1.5; color: #e6c27b; }
+#room-code-display { font-size: 15px; letter-spacing: 2px; margin: 10px 0; user-select: all; }
+.party button { padding: 6px 8px; font-size: 11px; margin-top: 8px; }
+#pings { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+.ping-marker { position: absolute; transform: translate(-50%, -50%); text-align: center; max-width: 200px; }
+.ping-marker strong { display: block; font-size: 32px; text-shadow: 0 0 6px #000; }
+.ping-marker span { display: block; background: #10131be8; border-radius: 5px; padding: 4px 6px; font-size: 12px; }
 
 button:focus-visible {
   outline: 2px solid #e6c27b;
@@ -162,6 +178,7 @@ button:focus-visible {
 }
 
 #start button { margin-top: 12px; }
+#start { align-items: start; }
 
 #notice {
   position: fixed;

@@ -8,7 +8,7 @@ const EXIT_THRESHOLD_Z = -6.25;
 
 export function createControls({
   camera, canvas, scene, interactables, ui, onInspect,
-  isExitOpen = () => false, onExit = () => {}
+  isExitOpen = () => false, onExit = () => {}, onPing = () => {}
 }) {
   let yaw = 0;
   let pitch = 0;
@@ -16,6 +16,7 @@ export function createControls({
   const raycaster = new THREE.Raycaster();
   const center = new THREE.Vector2(0, 0);
   let entered = false;
+  let lastPing = -Infinity;
 
   function clearInput() {
     for (const code of Object.keys(keys)) delete keys[code];
@@ -33,11 +34,11 @@ export function createControls({
   }
 
   function canExplore() {
-    return entered && !ui.isNoticeOpen() && !ui.isComplete()
+    return entered && !ui.isNoticeOpen() && !ui.isComplete() && !ui.isBusy?.()
       && document.pointerLockElement === canvas;
   }
 
-  function findTarget() {
+  function findHit(range) {
     camera.updateMatrixWorld();
     scene?.updateMatrixWorld();
     raycaster.setFromCamera(center, camera);
@@ -49,13 +50,29 @@ export function createControls({
         if (!parent.visible) visible = false;
       }
       if (!visible) continue;
-      if (hit.distance >= 4) return null;
+      if (hit.distance >= range) return null;
       let object = hit.object;
       while (object && !object.userData.interactable) object = object.parent;
-      return object?.userData.interactable ? object : null;
+      return { hit, object: object?.userData.interactable ? object : null };
     }
     return null;
   }
+
+  function findTarget() { return findHit(4)?.object; }
+
+  function ping() {
+    if (!canExplore() || performance.now() - lastPing < 1000) return;
+    const result = findHit(20);
+    if (!result) return;
+    lastPing = performance.now();
+    const data = result.object?.userData;
+    onPing({ position: result.hit.point.toArray(), target: data?.runeId ?? data?.type ?? null });
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    if (e.button === 1) { e.preventDefault(); ping(); }
+  });
+  canvas.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 
   canvas.addEventListener('click', () => {
     if (entered && !ui.isNoticeOpen() && !ui.isComplete()) capturePointer();
@@ -79,6 +96,10 @@ export function createControls({
 
   document.addEventListener('keydown', e => {
     if (!entered || ui.isComplete()) return;
+    if (e.code === 'KeyQ') {
+      if (!e.repeat) { e.preventDefault(); ping(); }
+      return;
+    }
     if (e.code === 'KeyE') {
       if (e.repeat) return;
       e.preventDefault();
@@ -128,7 +149,10 @@ export function createControls({
 
     if (exitOpen && inDoorway && previousZ > EXIT_THRESHOLD_Z
       && camera.position.z <= EXIT_THRESHOLD_Z) {
-      onExit();
+      const result = onExit();
+      if (result?.then) result.then(completed => {
+        if (!completed && camera.position.z <= EXIT_THRESHOLD_Z) camera.position.z = EXIT_THRESHOLD_Z + 0.1;
+      });
       clearInput();
       return;
     }
@@ -144,13 +168,14 @@ export function createControls({
     capturePointer();
   }
 
-  function restart() {
+  function restart({ capture = true } = {}) {
     clearInput();
     yaw = 0;
     pitch = 0;
     camera.position.set(0, 1.65, 5);
     camera.rotation.set(0, 0, 0, 'YXZ');
-    enter();
+    entered = true;
+    if (capture) capturePointer();
   }
 
   return { update, enter, restart };

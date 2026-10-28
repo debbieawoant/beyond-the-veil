@@ -10,7 +10,7 @@ The project is being developed with a focus on immersive 3D environments, meanin
 
 **Live Prototype:** https://beyond-the-veil.debbieannwoantoine.workers.dev/
 
-**Project Status:** Early prototype — local first-chamber puzzle implemented; multiplayer planned. The live URL may lag behind local development.
+**Project Status:** Early prototype — local first-chamber puzzle and private-test multiplayer rooms, shared puzzle state and contextual pings implemented. Private browser-session tests against hosted Supabase passed; separate-device and public-release acceptance remain outstanding. New installations require the Supabase setup below. The live URL may lag behind local development.
 
 ---
 
@@ -217,7 +217,7 @@ Planned tools include:
 - A shared journal for discovered clues.
 - Optional text communication for coordinating puzzle solutions.
 
-**Current multiplayer status:** The project is currently an early browser-based prototype. A complete multiplayer backend, room-code system, synchronized player state, and shared puzzle-state system are planned features and should not be considered implemented until tested successfully.
+**Current multiplayer status:** The private-test implementation supports anonymous guests, eight-character room codes (up to four members), a real roster, shared journal/runes/door state, individual exit completion, reconnect snapshots, host-only restart and contextual Q/middle-mouse pings. Database rules and two independent clients are tested locally. User-reported browser-session checks against hosted Supabase confirmed membership, shared journal/door updates, individual completion, restart, pings, reconnect and late joining. Separate-device acceptance remains outstanding. Avatars, class abilities, touch controls and a ping wheel remain planned. See [Supabase setup and testing](supabase/README.md).
 
 ## Visual and Audio Direction
 
@@ -267,7 +267,7 @@ The project prioritizes browser-based development, low operating costs, and tool
 | Git and GitHub | Version control and source management |
 | VS Code for the Web (`vscode.dev`) | Browser-based code editing |
 | Cloudflare | Hosting and deployment of the browser prototype |
-| Supabase Free Plan | Planned multiplayer state, session management, and real-time communication |
+| Supabase Free Plan | Private-test guest identities, room/puzzle RPCs, and private Realtime notifications/pings; hosted setup required |
 
 The precise multiplayer architecture may evolve as development progresses. Any backend or service integration must be verified against its current capabilities, free-tier limits, and security requirements.
 
@@ -433,12 +433,37 @@ All paths below are relative to the application folder:
 | `src/controls.js` | Keyboard input, mouse look, movement, and targeting |
 | `src/interactions.js` | Local prototype interaction state and inspection effects |
 | `src/puzzle.js` | Pure local puzzle rules, stable rune identifiers, and resettable state |
-| `src/ui.js` | Start screen, class selection, party placeholder, journal, hints, and notices |
+| `src/ui.js` | Lobby, class selection, connected-party roster, journal, hints, and notices |
+| `src/multiplayer.js` | Guest/session handling, room RPCs, private subscriptions, reconnect snapshots and heartbeat |
+| `src/pings.js` | Validated, expiring world-anchored ping labels and off-screen indicators |
 | `src/style.css` | Existing visual styling and layout |
 | `test/prototype.test.js` | Scene, interaction, control, and raycast-driven chamber tests |
 | `test/puzzle.test.js` | Puzzle sequence, validation, idempotency, completion, and reset tests |
+| `test/multiplayer.test.js` | Transport, reconnect, revision, ping and async-interaction tests |
+| `test/database.test.js` | Actual SQL migration, permissions, puzzle/room rules and two-client integration in embedded PostgreSQL |
+| `scripts/browser-check.mjs` | Optional headless Firefox check using the real UI/SQL and a local test transport |
 
-The original prototype was first split into modules without changing behavior. The current local playtest adds a complete opening puzzle on that foundation. There is no backend, Supabase configuration, or required environment variable yet.
+The original prototype was first split into modules without changing behavior. The local puzzle remains available without a backend. Multiplayer uses Supabase and requires the settings and migration below. PGlite is a development-only database test dependency; it is not a game server and is never included in the deployed site.
+
+### Supabase connection settings
+
+Vite is the existing development/build tool, not a separate online service. Its local settings go in a plain-text file named `.env.local` in the **nested application folder**, beside `package.json`. There is no need to install another tool or configure Cloudflare to prepare this file.
+
+1. Open the Supabase project and click **Connect** at the top. In the app/framework connection section, copy the **Project URL** and **Publishable key**. The Project URL looks like `https://YOUR_PROJECT_REF.supabase.co`; it is not the dashboard address or a `postgresql://` database connection string.
+2. Copy `beyond-the-veil/.env.example` to `beyond-the-veil/.env.local` (both paths relative to this README). On this workstation the full settings path is `/home/arthura/AI/projects/beyond-the-veil/beyond-the-veil/.env.local`.
+3. Open `.env.local` in a text editor and replace the two Supabase placeholders with the project's values:
+
+   ```dotenv
+   VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+   VITE_TURNSTILE_SITE_KEY=
+   ```
+
+4. Leave the Turnstile site key empty for private testing. Follow [the owner setup checklist](supabase/README.md) to run the one-time SQL migration and configure private Realtime. Restart the local development server after changing this file. Production uploads need a new build to include updated settings.
+
+The URL and publishable key are public browser configuration. Never put a database password, Supabase secret/service-role key, or Turnstile secret in a `VITE_` setting; Vite exposes these settings to browser code. `.env.local` is ignored by Git; `.env.example` contains placeholders only. With valid settings, use **Create room / Join room**, then **Enter room**. Without settings, **Play solo** still works. Room creation reports missing database setup instead of silently falling back to unsynchronized play.
+
+**Deferred public-multiplayer prerequisite — Turnstile:** anonymous sign-ins have been enabled in Supabase, but the person doing setup does not have access to the Cloudflare account. Private testing can proceed without Turnstile. Before public testing/release, revisit this with the Cloudflare owner. **CAPTCHA token collection/submission is not implemented yet**; supplying a site key alone is insufficient. Add that frontend flow before enabling Supabase CAPTCHA enforcement. See the [release reminder](supabase/README.md#deferred-release-prerequisite-turnstile). Never put its secret in browser settings.
 
 ### Automated checks
 
@@ -450,9 +475,11 @@ npm run build
 npm audit
 ```
 
-Tests use Node's built-in test runner, without an additional test dependency. The 35 tests cover scene structure and target visibility, puzzle prerequisites and order, invalid and repeated actions, retries, completion, replay, journal updates, elapsed-time movement, inspection/focus input guards, occlusion, targeting range, and an entire solve using actual scene raycasts and movement through the exit. Doorway regressions cover sealed/open passage, adjacent walls, diagonal approaches, passage sides, one-time threshold completion, and restoring the barrier on replay.
+Tests use Node's built-in test runner and the development-only PGlite dependency for actual PostgreSQL migration checks. Coverage includes local puzzle/doorway/input regressions, private room permissions and capacity, simultaneous/stale actions, individual completion, host reset, reconnect/poll recovery, safe ping payloads/cooldowns and two independent clients cooperating through SQL RPCs.
 
-These checks do not replace play-testing: they do not test WebGL rendering, real pointer-lock permission, accessibility, Cloudflare settings, or multiplayer.
+For an optional WebGL/UI acceptance check with Firefox installed, run `npm run test:browser`. It creates an isolated temporary Firefox profile and loopback test server, substitutes a local transport for Supabase, and runs the actual SQL migration in PGlite. It never contacts or changes the hosted Supabase project. Set `FIREFOX_BIN` if Firefox is not on PATH and `BTV_TEST_TMP` to choose a temporary directory. Snap-confined Firefox may need a profile directory it can access or a non-confined executable. The check simulates pointer capture/frame timing; real permissions and human usability still need manual testing.
+
+These checks do not replace real separate-device play, hosted Supabase gateway/WebSocket authorization, accessibility checks or Cloudflare deployment checks. Follow the [multiplayer acceptance checklist](supabase/README.md#acceptance-checklist) after configuring the project.
 
 ### Production build and preview
 
@@ -510,13 +537,15 @@ For a future Git-connected build, the application/root directory is `beyond-the-
 
 On **2026-10-26**, a production build of the original, pre-refactor code matched the public deployment's HTML, JavaScript, and CSS **byte-for-byte**. The corresponding asset filenames were `index-BBLorQlz.js` and `index-ClVH_mX4.css`. Module changes can legitimately produce a different JavaScript filename; that does not update the public deployment automatically.
 
-The local puzzle passes 35 Node tests and a headless Firefox playthrough covering a wrong sequence, the full successful sequence, sealed-door blocking, walk-through exit completion, and replay, with no JavaScript errors. The browser check used real WebGL rendering with deterministic frame timing and simulated pointer capture; real desktop mouse-capture permission and human usability still need manual play-testing.
+The earlier local puzzle passed 35 Node tests and a headless Firefox solve/retry/replay check. The private multiplayer milestone now passes **73 tests**, a production build and dependency audit, plus a two-player headless Firefox check of shared journal/runes, contextual expiring pings, individual completion, reload/rejoin, host reset and leave. The browser check uses real WebGL and the actual SQL migration with a local test transport, deterministic frame timing and simulated pointer capture. These automated checks do not alter the hosted project.
+
+On **2026-10-27**, the user applied the Supabase migration and tested independent browser sessions against hosted Supabase. They confirmed both players in the party list, host actions updating the joiner's journal/door, individual walk-through completion, host restart, contextual pings, refresh/reconnect and late joining with current progress. An initial Realtime join failure recovered on reload; its original cause was not established. Closing a tab retained its reserved membership as designed; a fresh private session joined as a new identity. Separate-device testing, broader usability and public-release security acceptance remain outstanding; no Cloudflare deployment was performed.
 
 Remaining limitations:
 
 - Movement is bounded by the room and the narrow exit passage, which opens only after unlocking. Pillars and the pedestal do not yet block movement.
-- Class abilities, actual party membership, multiplayer, and touch controls are not implemented.
-- Progress is in memory only. Additional chapters, audio, and broader accessibility/performance work remain planned.
+- Private multiplayer passed user-reported browser-session checks against hosted Supabase; separate-device acceptance remains outstanding. Class abilities, avatars, a ping wheel and touch controls are not implemented. Disconnected seats remain reserved; a host remove-away-player control is not implemented.
+- Solo progress is in memory only. Configured multiplayer rooms persist for 24 hours and reconnect depends on retained browser identity. Additional chapters, audio, and broader accessibility/performance work remain planned.
 - The existing public deployment is not automatically updated by local edits or builds.
 
 ## Contributing and Future Development
@@ -526,4 +555,4 @@ Remaining limitations:
 - Run automated checks and the relevant manual tests before sharing a build.
 - Share source through Git and built upload files separately. Do not commit Node installations, `node_modules/`, `dist/`, or local secrets.
 - When intentionally changing dependencies or the supported Node/npm versions, update the lockfile and version documentation together and verify a fresh `npm ci` build.
-- Multiplayer/backend selection remains a separate decision. Never put server secrets or Supabase service-role keys in browser code; secure shared-state updates must be designed and tested before integration.
+- Supabase multiplayer changes require versioned migrations and permission/action tests. Never put server secrets or Supabase service-role keys in browser code. Keep public access deferred until the abuse-protection and hosted acceptance checklist is complete.

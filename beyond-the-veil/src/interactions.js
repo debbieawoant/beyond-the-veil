@@ -2,16 +2,23 @@ import { createPuzzle, RUNE_LABELS } from './puzzle.js';
 
 export function createInteractions({ setPuzzleState, ui }) {
   const puzzle = createPuzzle();
+  let remoteAction = null;
+  let sharedState = null;
+
+  function getState() { return sharedState ?? puzzle.getState(); }
 
   function render(state) {
     setPuzzleState(state);
     ui.setProgress(state);
+    if (state.chartDiscovered) {
+      ui.setClues('Crown → River → Gate. Crown: three points; River: two waves; Gate: an arch. Activate them in order on the east wall, then align the central orrery.');
+    }
   }
 
   function inspect(object) {
     const { type, title, description, runeId } = object.userData;
     if (type === 'exit') {
-      const message = puzzle.getState().unlocked
+      const message = getState().unlocked
         ? 'Walk through the glowing doorway to leave. Crossing the threshold completes the chamber; pressing E only inspects it.'
         : 'The exit is sealed. Read the star chart on the west wall, awaken the three runes in its order, then align the central orrery.';
       ui.setHint(message);
@@ -26,7 +33,17 @@ export function createInteractions({ setPuzzleState, ui }) {
     };
     if (!actions[type]) return;
 
-    const result = puzzle.act(actions[type]);
+    if (remoteAction) {
+      ui.setBusy(true);
+      ui.setHint('Waiting for the room…');
+      return remoteAction(actions[type]).then(result => describe(result, object.userData))
+        .catch(error => ui.setHint(`Action not confirmed: ${error.message}`))
+        .finally(() => ui.setBusy(false));
+    }
+    describe(puzzle.act(actions[type]), object.userData);
+  }
+
+  function describe(result, { title, description, runeId }) {
     render(result.state);
     let message;
 
@@ -63,6 +80,9 @@ export function createInteractions({ setPuzzleState, ui }) {
         ui.setHint('The chamber is complete. The path home is open.');
         ui.showCompletion();
         return;
+      case 'stale':
+        message = 'A teammate changed the puzzle first. Your view is up to date; inspect again to retry.';
+        break;
       default:
         return;
     }
@@ -72,7 +92,20 @@ export function createInteractions({ setPuzzleState, ui }) {
   }
 
   function crossExit() {
-    if (puzzle.getState().completed) return false;
+    if (getState().completed) return false;
+    if (remoteAction) {
+      ui.setBusy(true);
+      return remoteAction({ type: 'exit' }).then(result => {
+        if (result.type !== 'completed') {
+          ui.setHint('The room changed before your exit was confirmed. Walk forward to try again.');
+          return false;
+        }
+        return true;
+      }).catch(error => {
+        ui.setHint(`Exit not confirmed: ${error.message}`);
+        return false;
+      }).finally(() => ui.setBusy(false));
+    }
     const result = puzzle.act({ type: 'exit' });
     if (result.type !== 'completed') return false;
     render(result.state);
@@ -82,11 +115,21 @@ export function createInteractions({ setPuzzleState, ui }) {
   }
 
   function reset() {
+    if (remoteAction) return remoteAction({ type: 'reset' });
     const { state } = puzzle.act({ type: 'reset' });
     ui.resetPuzzle();
     render(state);
   }
 
   render(puzzle.getState());
-  return { inspect, crossExit, reset, getState: puzzle.getState };
+  return { inspect, crossExit, reset, getState,
+    setRemote(action) {
+      if (remoteAction !== action) { remoteAction = action; sharedState = null; }
+    },
+    applySharedState(state) {
+      sharedState = state;
+      render(state);
+      if (state.completed) ui.showCompletion();
+    }
+  };
 }

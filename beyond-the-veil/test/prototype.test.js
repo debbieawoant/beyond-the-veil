@@ -114,7 +114,7 @@ test('replay restores the seal, runes, orrery, journal, and completion state', (
 });
 
 function createControlHarness(t, {
-  scene, interactables = [], ui = createTestUI(), onInspect, isExitOpen, onExit
+  scene, interactables = [], ui = createTestUI(), onInspect, isExitOpen, onExit, onPing
 } = {}) {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const document = new EventTarget();
@@ -131,7 +131,7 @@ function createControlHarness(t, {
   camera.position.set(0, 1.65, 5);
   const inspected = [];
   const controls = createControls({
-    camera, canvas, scene, interactables, ui, isExitOpen, onExit,
+    camera, canvas, scene, interactables, ui, isExitOpen, onExit, onPing,
     onInspect: onInspect ?? (object => {
       inspected.push(object);
       ui.showNotice(object.userData.title, object.userData.description);
@@ -284,6 +284,59 @@ test('distant objects cannot be inspected', t => {
   controls.enter();
   press('KeyE');
   assert.equal(inspected.length, 0);
+});
+
+test('Q pings use the visible hit location/target and respect entry, repeat, cooldown and notice guards', t => {
+  const scene = new THREE.Scene();
+  const target = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2));
+  target.position.set(0, 1.65, 3);
+  target.userData = { interactable: true, type: 'rune', runeId: 'crown' };
+  scene.add(target);
+  const pings = [];
+  const { controls, ui, press, send } = createControlHarness(t, { scene, onPing: ping => pings.push(ping) });
+  press('KeyQ');
+  assert.equal(pings.length, 0);
+  controls.enter();
+  send('keydown', { code: 'KeyQ', repeat: true });
+  assert.equal(pings.length, 0);
+  press('KeyQ');
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0].target, 'crown');
+  assert.ok(Math.abs(pings[0].position[2] - 3.1) < 1e-6);
+  press('KeyQ');
+  assert.equal(pings.length, 1);
+  ui.showNotice('Pause', 'Reading');
+  press('KeyQ');
+  assert.equal(pings.length, 1);
+});
+
+test('middle mouse pings solid surfaces rather than objects hidden behind them', t => {
+  const scene = new THREE.Scene();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2));
+  wall.position.set(0, 1.65, 4);
+  const target = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2));
+  target.position.set(0, 1.65, 3);
+  target.userData = { interactable: true, type: 'chart' };
+  scene.add(wall, target);
+  const pings = [];
+  const { controls, canvas } = createControlHarness(t, { scene, onPing: ping => pings.push(ping) });
+  controls.enter();
+  canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 1 }));
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0].target, null);
+  assert.ok(Math.abs(pings[0].position[2] - 4.1) < 1e-6);
+});
+
+test('an unconfirmed asynchronous exit returns the player before the threshold for a retry', async t => {
+  const { controls, camera, send } = createControlHarness(t, {
+    isExitOpen: () => true, onExit: async () => false
+  });
+  controls.enter();
+  camera.position.set(0, 1.65, -6.24);
+  send('keydown', { code: 'KeyW' });
+  controls.update();
+  await Promise.resolve();
+  assert.ok(camera.position.z > -6.25);
 });
 
 test('the sealed doorway blocks walking and cannot trigger completion', t => {
